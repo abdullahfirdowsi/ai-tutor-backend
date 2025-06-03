@@ -1,0 +1,12 @@
+fastapi==0.115.12
+uvicorn[standard]==0.34.3
+firebase-admin==6.8.0
+openai==1.83.0
+google-cloud-texttospeech==2.27.0
+python-dotenv==1.1.0
+pydantic==2.11.5
+pydantic-settings==2.2.1
+httpx==0.28.1
+python-multipart==0.0.9
+python-jose[cryptography]==3.3.0
+
