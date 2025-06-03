@@ -1,18 +1,13 @@
 import firebase_admin
 from firebase_admin import credentials, firestore, auth
 from typing import Dict, Any, Optional
-import json
 import logging
 import os
-from pathlib import Path
 
 from config.settings import get_settings
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
-
-# Path to Firebase service account JSON file
-FIREBASE_SERVICE_ACCOUNT_PATH = os.path.abspath(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "config", "firebase-adminsdk.json"))
 
 # Global variables to track initialization
 _firebase_app = None
@@ -35,12 +30,25 @@ def initialize_firebase() -> firebase_admin.App:
         return _firebase_app
     
     try:
-        # Check if Firebase service account file exists
-        if not os.path.exists(FIREBASE_SERVICE_ACCOUNT_PATH):
-            raise ValueError(f"Firebase service account file not found at {FIREBASE_SERVICE_ACCOUNT_PATH}")
+        # Create Firebase credentials from environment variables
+        if not settings.FIREBASE_PROJECT_ID or not settings.FIREBASE_PRIVATE_KEY or not settings.FIREBASE_CLIENT_EMAIL:
+            raise ValueError("Missing required Firebase credentials in environment variables")
         
-        # Initialize Firebase with service account file
-        cred = credentials.Certificate(FIREBASE_SERVICE_ACCOUNT_PATH)
+        # Initialize Firebase with credentials from environment variables
+        credential_dict = {
+            "type": "service_account",
+            "project_id": settings.FIREBASE_PROJECT_ID,
+            "private_key_id": settings.FIREBASE_PRIVATE_KEY_ID,
+            "private_key": settings.FIREBASE_PRIVATE_KEY,
+            "client_email": settings.FIREBASE_CLIENT_EMAIL,
+            "client_id": settings.FIREBASE_CLIENT_ID,
+            "auth_uri": settings.FIREBASE_AUTH_URI,
+            "token_uri": settings.FIREBASE_TOKEN_URI,
+            "auth_provider_x509_cert_url": settings.FIREBASE_AUTH_PROVIDER_X509_CERT_URL,
+            "client_x509_cert_url": settings.FIREBASE_CLIENT_X509_CERT_URL,
+            "universe_domain": settings.FIREBASE_UNIVERSE_DOMAIN
+        }
+        cred = credentials.Certificate(credential_dict)
         firebase_options = {}
         
         # Add optional settings from environment variables if available

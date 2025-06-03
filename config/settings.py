@@ -17,14 +17,21 @@ class Settings(BaseSettings):
     
     # Firebase Settings
     FIREBASE_PROJECT_ID: str
+    FIREBASE_PRIVATE_KEY_ID: str
     FIREBASE_PRIVATE_KEY: str
     FIREBASE_CLIENT_EMAIL: str
+    FIREBASE_CLIENT_ID: Optional[str] = None
+    FIREBASE_AUTH_URI: Optional[str] = "https://accounts.google.com/o/oauth2/auth"
+    FIREBASE_TOKEN_URI: Optional[str] = "https://oauth2.googleapis.com/token"
+    FIREBASE_AUTH_PROVIDER_X509_CERT_URL: Optional[str] = "https://www.googleapis.com/oauth2/v1/certs"
+    FIREBASE_CLIENT_X509_CERT_URL: Optional[str] = None
+    FIREBASE_UNIVERSE_DOMAIN: Optional[str] = "googleapis.com"
     FIREBASE_DATABASE_URL: Optional[str] = None
     FIREBASE_STORAGE_BUCKET: Optional[str] = None
     
     # OpenAI Settings
     OPENAI_API_KEY: str
-    OPENAI_MODEL: str = "gpt-4o"
+    OPENAI_MODEL: str = "gpt-3.5-turbo"
     OPENAI_MAX_TOKENS: int = 1000
     OPENAI_TEMPERATURE: float = 0.7
     
