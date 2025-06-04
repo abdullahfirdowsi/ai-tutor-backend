@@ -140,7 +140,7 @@ async def generate_lesson(
         # Generate unique ID for the lesson
         lesson_id = str(uuid.uuid4())
         
-        # Generate lesson content using OpenAI
+        # Generate lesson content using Google Gemini
         lesson_content = await generate_lesson_content(
             subject=subject,
             topic=topic,

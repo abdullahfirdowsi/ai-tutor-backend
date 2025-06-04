@@ -88,7 +88,7 @@ async def get_answer(question_data: Dict[str, Any]) -> Dict[str, Any]:
             if lesson:
                 lesson_content = lesson.get("content")
                 
-        # Generate answer using OpenAI
+        # Generate answer using Google Gemini
         answer_data = await generate_answer(
             question=question_data.get("question"),
             context=question_data.get("context"),

@@ -29,9 +29,11 @@ class Settings(BaseSettings):
     FIREBASE_API_KEY: Optional[str] = None
     FIREBASE_AUTH_DOMAIN: Optional[str] = None
     
-    # OpenAI settings
-    OPENAI_API_KEY: Optional[str] = None
-    OPENAI_MODEL: str = "gpt-4"  # Default model to use
+    # Google Gemini settings
+    GEMINI_API_KEY: Optional[str] = None
+    GEMINI_MODEL: str = "gemini-1.5-flash"  # Default model to use
+    GEMINI_MAX_TOKENS: int = 2048
+    GEMINI_TEMPERATURE: float = 0.7
     
     # Other application settings that might be needed
     PROJECT_NAME: str = "AI Tutor Pro"

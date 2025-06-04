@@ -1,4 +1,4 @@
-import openai
+import google.generativeai as genai
 from typing import Dict, Any, List, Optional
 import logging
 import json
@@ -12,10 +12,15 @@ from config.settings import get_settings
 settings = get_settings()
 logger = logging.getLogger(__name__)
 
-# Initialize OpenAI client
-client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
+# Configure Google Gemini
+if settings.GEMINI_API_KEY:
+    genai.configure(api_key=settings.GEMINI_API_KEY)
+    model = genai.GenerativeModel(settings.GEMINI_MODEL)
+else:
+    logger.error("GEMINI_API_KEY not found in environment variables")
+    model = None
 
-# Thread pool for running synchronous OpenAI operations asynchronously
+# Thread pool for running synchronous Gemini operations asynchronously
 executor = ThreadPoolExecutor()
 
 async def generate_lesson_content(
@@ -26,7 +31,7 @@ async def generate_lesson_content(
     additional_instructions: Optional[str] = None
 ) -> Dict[str, Any]:
     """
-    Generate a lesson using OpenAI
+    Generate a lesson using Google Gemini
     
     Args:
         subject: Subject area (e.g., "Mathematics", "Physics")
@@ -54,40 +59,37 @@ async def generate_lesson_content(
         5. A list of additional resources for further learning
         6. Relevant tags for categorization
         
-        Format your response as a valid JSON object with the following structure:
-        {
+Format your response as a valid JSON object with the following structure:
+        {{
             "title": "Lesson Title",
             "summary": "Brief overview of the lesson",
             "content": [
-                {
+                {{
                     "title": "Section Title",
                     "content": "Section content with explanations, examples, etc.",
                     "order": 1,
                     "type": "text"
-                }
-                // Additional sections...
+                }}
             ],
             "exercises": [
-                {
+                {{
                     "question": "Exercise question",
                     "options": ["Option A", "Option B", "Option C", "Option D"],
                     "correct_answer": "Correct answer",
                     "explanation": "Explanation of the answer",
                     "difficulty": "medium"
-                }
-                // Additional exercises...
+                }}
             ],
             "resources": [
-                {
+                {{
                     "title": "Resource Title",
                     "url": "URL if applicable",
                     "type": "link",
                     "description": "Brief description of the resource"
-                }
-                // Additional resources...
+                }}
             ],
             "tags": ["tag1", "tag2", "tag3"]
-        }
+        }}
         """
         
         # Add additional instructions if provided
@@ -96,19 +98,24 @@ async def generate_lesson_content(
             
         # Run in thread pool to avoid blocking
         def _generate_content():
-            response = client.chat.completions.create(
-                model=settings.OPENAI_MODEL,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"Create a {difficulty} level lesson on {topic} in {subject} that takes about {duration_minutes} minutes to complete."}
-                ],
-                temperature=0.7,
-                max_tokens=4000,
-                response_format={"type": "json_object"}
+            if not model:
+                raise Exception("Gemini model not initialized. Check your GEMINI_API_KEY.")
+                
+            prompt = f"{system_prompt}\n\nCreate a {difficulty} level lesson on {topic} in {subject} that takes about {duration_minutes} minutes to complete."
+            
+            response = model.generate_content(
+                prompt,
+                generation_config=genai.types.GenerationConfig(
+                    temperature=settings.GEMINI_TEMPERATURE,
+                    max_output_tokens=settings.GEMINI_MAX_TOKENS
+                )
             )
             
-            # Parse response content
-            content = response.choices[0].message.content
+            # Parse response content from Gemini
+            content = response.text
+            # Clean up the response to extract JSON if needed
+            if content.startswith('```json'):
+                content = content.replace('```json', '').replace('```', '').strip()
             return json.loads(content)
             
         return await asyncio.get_event_loop().run_in_executor(executor, _generate_content)
@@ -123,7 +130,7 @@ async def generate_answer(
     lesson_content: Optional[List[Dict[str, Any]]] = None
 ) -> Dict[str, Any]:
     """
-    Generate an answer to a question using OpenAI
+    Generate an answer to a question using Google Gemini
     
     Args:
         question: The question to answer
@@ -145,18 +152,17 @@ async def generate_answer(
         
         If you use specific sources or reference materials in your answer, include them in your response.
         
-        Format your response as a valid JSON object with the following structure:
-        {
+Format your response as a valid JSON object with the following structure:
+        {{
             "answer": "Your comprehensive answer to the question",
             "references": [
-                {
+                {{
                     "title": "Reference Title",
                     "source": "Source name/type",
                     "url": "URL if applicable"
-                }
-                // Additional references if used...
+                }}
             ]
-        }
+        }}
         """
         
         # Create user prompt
@@ -178,19 +184,24 @@ async def generate_answer(
             
         # Run in thread pool to avoid blocking
         def _generate_answer():
-            response = client.chat.completions.create(
-                model=settings.OPENAI_MODEL,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                temperature=0.5,
-                max_tokens=2000,
-                response_format={"type": "json_object"}
+            if not model:
+                raise Exception("Gemini model not initialized. Check your GEMINI_API_KEY.")
+                
+            prompt = f"{system_prompt}\n\nUser question: {user_prompt}"
+            
+            response = model.generate_content(
+                prompt,
+                generation_config=genai.types.GenerationConfig(
+                    temperature=0.5,
+                    max_output_tokens=2000
+                )
             )
             
-            # Parse response content
-            content = response.choices[0].message.content
+            # Parse response content from Gemini
+            content = response.text
+            # Clean up the response to extract JSON if needed
+            if content.startswith('```json'):
+                content = content.replace('```json', '').replace('```', '').strip()
             return json.loads(content)
             
         return await asyncio.get_event_loop().run_in_executor(executor, _generate_answer)

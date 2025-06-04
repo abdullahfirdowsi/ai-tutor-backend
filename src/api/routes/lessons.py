@@ -132,7 +132,7 @@ async def create_lesson(
         HTTPException: If lesson generation fails
     """
     try:
-        # Generate lesson with OpenAI
+        # Generate lesson with Google Gemini
         lesson = await generate_lesson(
             subject=request.subject,
             topic=request.topic,

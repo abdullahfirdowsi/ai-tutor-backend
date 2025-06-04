@@ -29,11 +29,11 @@ class Settings(BaseSettings):
     FIREBASE_DATABASE_URL: Optional[str] = None
     FIREBASE_STORAGE_BUCKET: Optional[str] = None
     
-    # OpenAI Settings
-    OPENAI_API_KEY: str
-    OPENAI_MODEL: str = "gpt-3.5-turbo"
-    OPENAI_MAX_TOKENS: int = 1000
-    OPENAI_TEMPERATURE: float = 0.7
+    # Google Gemini Settings
+    GEMINI_API_KEY: str
+    GEMINI_MODEL: str = "gemini-1.5-flash"
+    GEMINI_MAX_TOKENS: int = 2048
+    GEMINI_TEMPERATURE: float = 0.7
     
     # Google Cloud TTS Settings
     GOOGLE_APPLICATION_CREDENTIALS: Optional[str] = None
