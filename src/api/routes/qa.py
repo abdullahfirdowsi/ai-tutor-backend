@@ -99,17 +99,24 @@ async def get_history(
         )
         
         # Format response
-        items = [
-            QAItemResponse(
-                id=item.get("id", ""),
-                question=item.get("question", ""),
-                answer=item.get("answer", ""),
-                created_at=item.get("created_at", datetime.now()),
-                lesson_id=item.get("lesson_id", None),
-                references=item.get("references", [])
-            )
-            for item in history
-        ]
+        items = []
+        for item in history:
+            try:
+                # Skip items that don't have an answer or are not in completed state
+                if not item.get("answer") or item.get("status") != "completed":
+                    continue
+                
+                items.append(QAItemResponse(
+                    id=item.get("id", ""),
+                    question=item.get("question", ""),
+                    answer=item.get("answer", ""),
+                    created_at=item.get("created_at", datetime.now()),
+                    lesson_id=item.get("lesson_id", None),
+                    references=item.get("references", [])
+                ))
+            except Exception as e:
+                logger.error(f"Error processing QA item: {str(e)}")
+                # Skip items that cause validation errors
         
         return QAHistoryResponse(
             items=items,
@@ -162,14 +169,28 @@ async def get_qa_item(
             
         item = history[0]
         
-        return QAItemResponse(
-            id=item.get("id", ""),
-            question=item.get("question", ""),
-            answer=item.get("answer", ""),
-            created_at=item.get("created_at", datetime.now()),
-            lesson_id=item.get("lesson_id", None),
-            references=item.get("references", [])
-        )
+        # Check if the item has the required fields
+        if not item.get("answer"):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Q&A item with ID {question_id} is not yet complete"
+            )
+        
+        try:
+            return QAItemResponse(
+                id=item.get("id", ""),
+                question=item.get("question", ""),
+                answer=item.get("answer", ""),
+                created_at=item.get("created_at", datetime.now()),
+                lesson_id=item.get("lesson_id", None),
+                references=item.get("references", [])
+            )
+        except Exception as e:
+            logger.error(f"Error processing QA item: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Invalid QA item data"
+            )
         
     except HTTPException:
         raise

@@ -8,9 +8,10 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
 from utils.ai import generate_answer
+from utils.firebase import get_firestore_client
 
-# Initialize Firestore client
-db = firestore.client()
+# Initialize Firestore client properly
+db = get_firestore_client()
 logger = logging.getLogger(__name__)
 
 # Thread pool for running synchronous Firebase operations asynchronously
@@ -148,6 +149,10 @@ async def get_qa_history(
         def _get_history():
             # Start with a base query
             query = db.collection("qa").where("user_id", "==", user_id)
+            
+            # By default, only fetch completed items with answers
+            if not question_id:
+                query = query.where("status", "==", "completed")
             
             # Apply filters if provided
             if lesson_id:
