@@ -1,5 +1,6 @@
 from typing import List, Union, Optional
 from pydantic_settings import BaseSettings
+from pydantic import field_validator
 from dotenv import load_dotenv
 import os
 from functools import lru_cache
@@ -15,7 +16,18 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
     
     # CORS settings
-    BACKEND_CORS_ORIGINS: List[str] = ["*"]
+    BACKEND_CORS_ORIGINS: Union[List[str], str] = ["*"]
+    
+    @field_validator('BACKEND_CORS_ORIGINS', mode='before')
+    @classmethod
+    def parse_cors_origins(cls, v):
+        if isinstance(v, str):
+            # Handle single string (like "*" or comma-separated values)
+            if v == "*":
+                return ["*"]
+            # Handle comma-separated origins
+            return [origin.strip() for origin in v.split(",") if origin.strip()]
+        return v
     
     # Logging
     LOG_LEVEL: str = "INFO"

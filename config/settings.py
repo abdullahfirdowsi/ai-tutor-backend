@@ -1,6 +1,7 @@
 from pydantic_settings import BaseSettings
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Union
 from functools import lru_cache
+from pydantic import field_validator
 
 
 class Settings(BaseSettings):
@@ -13,7 +14,18 @@ class Settings(BaseSettings):
     DEBUG: bool = True
     
     # CORS Settings
-    BACKEND_CORS_ORIGINS: List[str] = ["*"]
+    BACKEND_CORS_ORIGINS: Union[List[str], str] = ["*"]
+    
+    @field_validator('BACKEND_CORS_ORIGINS', mode='before')
+    @classmethod
+    def parse_cors_origins(cls, v):
+        if isinstance(v, str):
+            # Handle single string (like "*" or comma-separated values)
+            if v == "*":
+                return ["*"]
+            # Handle comma-separated origins
+            return [origin.strip() for origin in v.split(",") if origin.strip()]
+        return v
     
     # Firebase Settings
     FIREBASE_PROJECT_ID: str
