@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  ai-tutor-backend:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      # API Configuration
+      - API_V1_STR=/api/v1
+      - PROJECT_NAME=AI Tutor Pro
+      - DEBUG=true
+      - LOG_LEVEL=INFO
+      
+      # CORS Settings (Allow all for testing)
+      - BACKEND_CORS_ORIGINS="*"
+      
+      # Firebase Settings (Set these in your environment or .env file)
+      - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID}
+      - FIREBASE_PRIVATE_KEY_ID=${FIREBASE_PRIVATE_KEY_ID}
+      - FIREBASE_PRIVATE_KEY=${FIREBASE_PRIVATE_KEY}
+      - FIREBASE_CLIENT_EMAIL=${FIREBASE_CLIENT_EMAIL}
+      - FIREBASE_CLIENT_ID=${FIREBASE_CLIENT_ID}
+      - FIREBASE_AUTH_URI=${FIREBASE_AUTH_URI:-https://accounts.google.com/o/oauth2/auth}
+      - FIREBASE_TOKEN_URI=${FIREBASE_TOKEN_URI:-https://oauth2.googleapis.com/token}
+      - FIREBASE_AUTH_PROVIDER_X509_CERT_URL=${FIREBASE_AUTH_PROVIDER_X509_CERT_URL:-https://www.googleapis.com/oauth2/v1/certs}
+      - FIREBASE_CLIENT_X509_CERT_URL=${FIREBASE_CLIENT_X509_CERT_URL}
+      - FIREBASE_UNIVERSE_DOMAIN=${FIREBASE_UNIVERSE_DOMAIN:-googleapis.com}
+      - FIREBASE_DATABASE_URL=${FIREBASE_DATABASE_URL}
+      - FIREBASE_STORAGE_BUCKET=${FIREBASE_STORAGE_BUCKET}
+      
+      # Google Gemini Settings
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-1.5-flash}
+      - GEMINI_MAX_TOKENS=${GEMINI_MAX_TOKENS:-2048}
+      - GEMINI_TEMPERATURE=${GEMINI_TEMPERATURE:-0.7}
+      
+      # Google Cloud TTS Settings
+      - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS}
+      - TTS_LANGUAGE_CODE=${TTS_LANGUAGE_CODE:-en-US}
+      - TTS_VOICE_NAME=${TTS_VOICE_NAME:-en-US-Neural2-A}
+    
+    volumes:
+      # Mount source code for development (hot reload)
+      - .:/app
+      # Mount Firebase service account key if you have one
+      # - ./path/to/serviceAccountKey.json:/app/serviceAccountKey.json:ro
+    
+    # Override command for development with hot reload
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Optional: Add a database service if needed
+  # postgres:
+  #   image: postgres:15
+  #   environment:
+  #     POSTGRES_DB: ai_tutor
+  #     POSTGRES_USER: postgres
+  #     POSTGRES_PASSWORD: password
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+
+# volumes:
+#   postgres_data:
+
