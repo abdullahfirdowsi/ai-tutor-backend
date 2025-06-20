@@ -2,17 +2,241 @@ from fastapi import APIRouter, Depends, HTTPException, status, Path, Query
 from typing import Dict, Any, List, Optional
 import logging
 from datetime import datetime
+@router.get("/sessions", response_model=QASessionListResponse)
+async def list_qa_sessions(
+    limit: int = Query(20, ge=1, le=100, description="Maximum number of sessions to return"),
+    skip: int = Query(0, ge=0, description="Number of sessions to skip"),
+    include_inactive: bool = Query(False, description="Whether to include inactive sessions"),
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """
+    Get a list of QA sessions for the current user
+    
+    Args:
+        limit: Maximum number of sessions to return
+        skip: Number of sessions to skip (for pagination)
+        include_inactive: Whether to include inactive sessions
+        current_user: Current authenticated user
+        
+    Returns:
+        QASessionListResponse: List of QA sessions
+    """
+    try:
+        user_id = current_user["uid"]
+        
+        # Get sessions
+        sessions = await get_qa_sessions(
+            user_id=user_id,
+            limit=limit,
+            skip=skip,
+            include_inactive=include_inactive
+        )
+        
+        return QASessionListResponse(
+            sessions=sessions,
+            total=len(sessions),
+            skip=skip,
+            limit=limit
+        )
+        
+    except Exception as e:
+        logger.error(f"Error retrieving QA sessions: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve QA sessions"
+        )
 
+@router.post("/sessions", response_model=QASessionResponse, status_code=status.HTTP_201_CREATED)
+async def create_session(
+    session: QASessionCreate,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """
+    Create a new QA session
+    
+    Args:
+        session: Session creation data
+        current_user: Current authenticated user
+        
+    Returns:
+        QASessionResponse: Created session
+    """
+    try:
+        user_id = current_user["uid"]
+        
+        # Validate lesson ID if provided
+        if session.lesson_id:
+            from models.lesson import get_lesson_by_id
+            lesson = await get_lesson_by_id(session.lesson_id)
+            if not lesson:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Lesson with ID {session.lesson_id} not found"
+                )
+        
+        # Create session
+        created_session = await create_qa_session(
+            user_id=user_id,
+            title=session.title,
+            topic=session.topic,
+            lesson_id=session.lesson_id
+        )
+        
+        return QASessionResponse(**created_session)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating QA session: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create QA session"
+        )
+
+@router.get("/sessions/{session_id}", response_model=QASessionResponse)
+async def get_session(
+    session_id: str = Path(..., description="The ID of the session to retrieve"),
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """
+    Get a specific QA session by ID
+    
+    Args:
+        session_id: ID of the session to retrieve
+        current_user: Current authenticated user
+        
+    Returns:
+        QASessionResponse: The requested session
+        
+    Raises:
+        HTTPException: If session not found or not authorized
+    """
+    try:
+        user_id = current_user["uid"]
+        
+        # Get session
+        session = await get_qa_session(session_id, user_id)
+        
+        if not session:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"QA session with ID {session_id} not found"
+            )
+            
+        return QASessionResponse(**session)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error retrieving QA session {session_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve QA session"
+        )
+
+@router.put("/sessions/{session_id}", response_model=QASessionResponse)
+async def update_session(
+    session_update: QASessionUpdate,
+    session_id: str = Path(..., description="The ID of the session to update"),
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """
+    Update a QA session
+    
+    Args:
+        session_update: Session update data
+        session_id: ID of the session to update
+        current_user: Current authenticated user
+        
+    Returns:
+        QASessionResponse: Updated session
+        
+    Raises:
+        HTTPException: If session not found or not authorized
+    """
+    try:
+        user_id = current_user["uid"]
+        
+        # Update session
+        update_data = session_update.dict(exclude_unset=True)
+        updated_session = await update_qa_session(session_id, user_id, update_data)
+        
+        if not updated_session:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"QA session with ID {session_id} not found"
+            )
+            
+        return QASessionResponse(**updated_session)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating QA session {session_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update QA session"
+        )
+
+@router.delete("/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_session(
+    session_id: str = Path(..., description="The ID of the session to delete"),
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """
+    Delete a QA session
+    
+    Args:
+        session_id: ID of the session to delete
+        current_user: Current authenticated user
+        
+    Returns:
+        None
+        
+    Raises:
+        HTTPException: If session not found or not authorized
+    """
+    try:
+        user_id = current_user["uid"]
+        
+        # Delete session
+        success = await delete_qa_session(session_id, user_id)
+        
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"QA session with ID {session_id} not found"
+            )
+            
+        # 204 No Content response (no body)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting QA session {session_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete QA session"
+        )
 from schemas.qa import (
     QuestionRequest,
     QuestionResponse,
     QAHistoryResponse,
-    QAItemResponse
+    QAItemResponse,
+    QASessionCreate,
+    QASessionUpdate,
+    QASessionResponse,
+    QASessionListResponse
 )
 from models.qa import (
     submit_question,
     get_answer,
-    get_qa_history
+    get_qa_history,
+    create_qa_session,
+    get_qa_sessions,
+    get_qa_session,
+    update_qa_session,
+    delete_qa_session
 )
 from utils.auth import get_current_user
 

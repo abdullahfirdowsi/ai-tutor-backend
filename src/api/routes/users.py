@@ -4,9 +4,143 @@ import logging
 import firebase_admin
 from firebase_admin import auth as firebase_auth
 from firebase_admin import exceptions as firebase_exceptions
+@router.get("/me/settings", response_model=UserSettingsResponse)
+async def get_my_settings(current_user: Dict[str, Any] = Depends(get_current_user)):
+    """
+    Get the current user's settings
+    
+    Args:
+        current_user: Current authenticated user from token
+        
+    Returns:
+        UserSettingsResponse: User's settings
+        
+    Raises:
+        HTTPException: If settings retrieval fails
+    """
+    try:
+        user_id = current_user["uid"]
+        settings_data = await get_user_settings(user_id)
+        
+        if not settings_data:
+            # Return default settings if not found
+            return UserSettingsResponse(
+                user_id=user_id,
+                updated_at=None
+            )
+            
+        return UserSettingsResponse(**settings_data)
+        
+    except Exception as e:
+        logger.error(f"Error retrieving user settings: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error while retrieving user settings"
+        )
 
-from schemas.user import UserProfileUpdate, UserProfileResponse, LearningProgressResponse
-from models.user import get_user_profile, update_user_profile, get_learning_progress
+
+@router.get("/me/activity", response_model=UserActivityResponse)
+async def get_my_activity(
+    limit: int = Query(5, ge=1, le=20, description="Maximum number of activities to return"),
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """
+    Get the current user's recent activity
+    
+    Args:
+        limit: Maximum number of activities to return
+        current_user: Current authenticated user from token
+        
+    Returns:
+        UserActivityResponse: User's recent activity data
+        
+    Raises:
+        HTTPException: If activity retrieval fails
+    """
+    try:
+        user_id = current_user["uid"]
+        
+        # Get recent activities from different sources
+        progress_data = await get_learning_progress(user_id)
+        completed_lessons = progress_data.get("completed_lessons", []) if progress_data else []
+        
+        # Sort by completion date (most recent first)
+        completed_lessons.sort(key=lambda x: x.get("completion_date", ""), reverse=True)
+        
+        # Format activity items with additional metadata
+        activities = []
+        for lesson in completed_lessons[:limit]:
+            activities.append({
+                "type": "lesson_completed",
+                "lesson_id": lesson.get("lesson_id"),
+                "title": lesson.get("title"),
+                "date": lesson.get("completion_date"),
+                "score": lesson.get("score"),
+                "time_spent": lesson.get("time_spent"),
+                "details": f"Completed lesson: {lesson.get('title')}"
+            })
+        
+        return UserActivityResponse(
+            activities=activities,
+            total=len(activities)
+        )
+        
+    except Exception as e:
+        logger.error(f"Error retrieving user activity: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve user activity"
+        )
+@router.put("/me/settings", response_model=UserSettingsResponse)
+async def update_my_settings(
+    settings_update: UserSettings,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """
+    Update the current user's settings
+    
+    Args:
+        settings_update: Settings data to update
+        current_user: Current authenticated user from token
+        
+    Returns:
+        UserSettingsResponse: Updated user settings
+        
+    Raises:
+        HTTPException: If settings update fails
+    """
+    try:
+        user_id = current_user["uid"]
+        
+        # Update settings in Firestore
+        settings_dict = settings_update.dict()
+        updated_settings = await update_user_settings(user_id, settings_dict)
+        
+        # Return updated settings with user_id
+        return UserSettingsResponse(
+            **updated_settings
+        )
+        
+    except Exception as e:
+        logger.error(f"Error updating user settings: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error while updating user settings"
+        )
+from schemas.user import (
+    UserProfileUpdate, 
+    UserProfileResponse, 
+    LearningProgressResponse,
+    UserSettings,
+    UserSettingsResponse
+)
+from models.user import (
+    get_user_profile, 
+    update_user_profile, 
+    get_learning_progress,
+    get_user_settings,
+    update_user_settings
+)
 from utils.auth import get_current_user
 
 # Initialize router

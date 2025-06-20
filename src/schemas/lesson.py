@@ -34,6 +34,47 @@ class LessonBase(BaseModel):
     difficulty: str
     duration_minutes: int
     tags: List[str] = Field(default_factory=list)
+
+class LessonListItem(BaseModel):
+    """Simplified lesson model for listing"""
+    id: str
+    title: str
+    subject: str
+    topic: str
+    difficulty: str
+    duration_minutes: int
+    created_at: datetime
+    tags: List[str] = Field(default_factory=list)
+    summary: Optional[str] = None
+
+class RecommendedLesson(LessonListItem):
+    """Lesson model with recommendation information"""
+    relevance_score: Optional[float] = None
+    recommendation_reason: Optional[str] = None
+    
+class RecommendedLessonsResponse(BaseModel):
+    """Response model for recommended lessons"""
+    lessons: List[RecommendedLesson]
+    total: int
+    
+class UserLessonProgress(BaseModel):
+    """Model for user's lesson progress information"""
+    progress: float = 0.0
+    time_spent: int = 0
+    last_accessed: Optional[datetime] = None
+    started_at: Optional[datetime] = None
+    completed: bool = False
+    
+class UserLessonItem(LessonListItem):
+    """Lesson model with user progress information"""
+    progress: UserLessonProgress
+    
+class UserLessonsResponse(BaseModel):
+    """Response model for user's lessons"""
+    lessons: List[UserLessonItem]
+    total: int
+    skip: int
+    limit: int
     
 class LessonGenerateRequest(BaseModel):
     """Request model for generating a lesson"""
@@ -69,22 +110,20 @@ class LessonProgressUpdate(BaseModel):
     last_position: Optional[str] = Field(None, description="Last position in the lesson")
     notes: Optional[str] = None
     
-class LessonListItem(BaseModel):
-    """Simplified lesson model for listing"""
-    id: str
-    title: str
-    subject: str
-    topic: str
-    difficulty: str
-    duration_minutes: int
-    created_at: datetime
-    tags: List[str] = Field(default_factory=list)
-    summary: Optional[str] = None
-    
 class LessonListResponse(BaseModel):
     """Response model for lesson listing"""
     lessons: List[LessonListItem]
     total: int
     skip: int
     limit: int
+    
+class LessonProgressResponse(BaseModel):
+    """Response model for lesson progress"""
+    progress: float
+    time_spent: int
+    completed: bool
+    score: Optional[float] = None
+    last_position: Optional[str] = None
+    notes: Optional[str] = None
+    last_accessed: Optional[datetime] = None
 

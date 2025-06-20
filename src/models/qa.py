@@ -6,7 +6,213 @@ import uuid
 import logging
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
+# QA Session Management
 
+async def create_qa_session(
+    user_id: str,
+    title: str,
+    topic: Optional[str] = None,
+    lesson_id: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Create a new QA session
+    
+    Args:
+        user_id: ID of the user creating the session
+        title: Session title
+        topic: Optional topic/subject
+        lesson_id: Optional related lesson ID
+        
+    Returns:
+        Dict: Created session data
+    """
+    try:
+        # Generate a unique ID for the session
+        session_id = str(uuid.uuid4())
+        
+        # Get current timestamp
+        now = datetime.now()
+        
+        # Create session document
+        session_data = {
+            "id": session_id,
+            "user_id": user_id,
+            "title": title,
+            "topic": topic,
+            "lesson_id": lesson_id,
+            "created_at": now,
+            "updated_at": now,
+            "message_count": 0,
+            "is_active": True,
+            "messages": []
+        }
+        
+        # Save to Firestore
+        def _save_session():
+            db.collection("qaSessions").document(session_id).set(session_data)
+            return session_data
+            
+        return await asyncio.get_event_loop().run_in_executor(executor, _save_session)
+        
+    except Exception as e:
+        logger.error(f"Error creating QA session: {str(e)}")
+        raise
+
+async def get_qa_sessions(
+    user_id: str,
+    limit: int = 20,
+    skip: int = 0,
+    include_inactive: bool = False
+) -> List[Dict[str, Any]]:
+    """
+    Get QA sessions for a user
+    
+    Args:
+        user_id: ID of the user
+        limit: Maximum number of sessions to return
+        skip: Number of sessions to skip
+        include_inactive: Whether to include inactive sessions
+        
+    Returns:
+        List[Dict]: List of QA sessions
+    """
+    try:
+        def _get_sessions():
+            # Start with a base query
+            query = db.collection("qaSessions").where("user_id", "==", user_id)
+            
+            # Filter by active status if needed
+            if not include_inactive:
+                query = query.where("is_active", "==", True)
+                
+            # Order by update date (most recent first)
+            query = query.order_by("updated_at", direction=firestore.Query.DESCENDING)
+            
+            # Execute query and get results
+            docs = query.stream()
+            sessions = []
+            
+            # Apply pagination manually
+            count = 0
+            for doc in docs:
+                if count < skip:
+                    count += 1
+                    continue
+                    
+                if len(sessions) >= limit:
+                    break
+                    
+                sessions.append(doc.to_dict())
+                count += 1
+                
+            return sessions
+            
+        return await asyncio.get_event_loop().run_in_executor(executor, _get_sessions)
+        
+    except Exception as e:
+        logger.error(f"Error getting QA sessions: {str(e)}")
+        raise
+
+async def get_qa_session(
+    session_id: str, 
+    user_id: str
+) -> Optional[Dict[str, Any]]:
+    """
+    Get a specific QA session by ID
+    
+    Args:
+        session_id: ID of the session
+        user_id: ID of the user (for authorization)
+        
+    Returns:
+        Dict: Session data or None if not found or not authorized
+    """
+    try:
+        def _get_session():
+            doc_ref = db.collection("qaSessions").document(session_id)
+            doc = doc_ref.get()
+            
+            if doc.exists:
+                session_data = doc.to_dict()
+                # Verify ownership
+                if session_data.get("user_id") == user_id:
+                    return session_data
+            return None
+            
+        return await asyncio.get_event_loop().run_in_executor(executor, _get_session)
+        
+    except Exception as e:
+        logger.error(f"Error getting QA session {session_id}: {str(e)}")
+        raise
+
+async def update_qa_session(
+    session_id: str,
+    user_id: str,
+    update_data: Dict[str, Any]
+) -> Optional[Dict[str, Any]]:
+    """
+    Update a QA session
+    
+    Args:
+        session_id: ID of the session to update
+        user_id: ID of the user (for authorization)
+        update_data: Data to update
+        
+    Returns:
+        Dict: Updated session data or None if not found or not authorized
+    """
+    try:
+        # Get the session first to check ownership
+        session = await get_qa_session(session_id, user_id)
+        
+        if not session:
+            return None
+            
+        # Add updated_at timestamp
+        update_data["updated_at"] = datetime.now()
+        
+        def _update_session():
+            doc_ref = db.collection("qaSessions").document(session_id)
+            doc_ref.update(update_data)
+            return {**session, **update_data}
+            
+        return await asyncio.get_event_loop().run_in_executor(executor, _update_session)
+        
+    except Exception as e:
+        logger.error(f"Error updating QA session {session_id}: {str(e)}")
+        raise
+
+async def delete_qa_session(
+    session_id: str,
+    user_id: str
+) -> bool:
+    """
+    Delete a QA session
+    
+    Args:
+        session_id: ID of the session to delete
+        user_id: ID of the user (for authorization)
+        
+    Returns:
+        bool: True if deleted successfully, False otherwise
+    """
+    try:
+        # Get the session first to check ownership
+        session = await get_qa_session(session_id, user_id)
+        
+        if not session:
+            return False
+            
+        def _delete_session():
+            doc_ref = db.collection("qaSessions").document(session_id)
+            doc_ref.delete()
+            return True
+            
+        return await asyncio.get_event_loop().run_in_executor(executor, _delete_session)
+        
+    except Exception as e:
+        logger.error(f"Error deleting QA session {session_id}: {str(e)}")
+        raise
 from utils.ai import generate_answer
 from utils.firebase import get_firestore_client
 

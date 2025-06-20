@@ -2,18 +2,100 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query, Path
 from typing import Dict, Any, List, Optional
 import logging
 from datetime import datetime
+@router.get("/recommended", response_model=RecommendedLessonsResponse)
+async def get_lesson_recommendations(
+    limit: int = Query(3, ge=1, le=10, description="Maximum number of recommendations to return"),
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """
+    Get personalized lesson recommendations for the current user
+    
+    Args:
+        limit: Maximum number of recommendations to return
+        current_user: Current authenticated user
+        
+    Returns:
+        RecommendedLessonsResponse: List of recommended lessons
+    """
+    try:
+        user_id = current_user["uid"]
+        
+        # Get personalized recommendations
+        recommendations = await get_recommended_lessons(
+            user_id=user_id,
+            limit=limit
+        )
+        
+        return RecommendedLessonsResponse(
+            lessons=recommendations,
+            total=len(recommendations)
+        )
+        
+    except Exception as e:
+        logger.error(f"Error retrieving lesson recommendations: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve lesson recommendations"
+        )
 
+@router.get("/my-lessons", response_model=UserLessonsResponse)
+async def get_my_lessons(
+    limit: int = Query(10, ge=1, le=50, description="Maximum number of lessons to return"),
+    skip: int = Query(0, ge=0, description="Number of lessons to skip"),
+    include_completed: bool = Query(False, description="Include completed lessons"),
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """
+    Get the current user's in-progress or completed lessons
+    
+    Args:
+        limit: Maximum number of lessons to return
+        skip: Number of lessons to skip (for pagination)
+        include_completed: Whether to include completed lessons
+        current_user: Current authenticated user
+        
+    Returns:
+        UserLessonsResponse: List of user's lessons with progress information
+    """
+    try:
+        user_id = current_user["uid"]
+        
+        # Get user's lessons
+        user_lessons = await get_user_lessons(
+            user_id=user_id,
+            limit=limit,
+            skip=skip,
+            include_completed=include_completed
+        )
+        
+        return UserLessonsResponse(
+            lessons=user_lessons,
+            total=len(user_lessons),
+            skip=skip,
+            limit=limit
+        )
+        
+    except Exception as e:
+        logger.error(f"Error retrieving user lessons: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve user lessons"
+        )
 from schemas.lesson import (
     LessonListResponse,
     LessonResponse,
     LessonGenerateRequest,
-    LessonProgressUpdate
+    LessonProgressUpdate,
+    RecommendedLessonsResponse,
+    UserLessonsResponse
 )
 from models.lesson import (
     get_lessons,
     get_lesson_by_id,
     generate_lesson,
-    update_lesson_progress
+    update_lesson_progress,
+    get_recommended_lessons,
+    get_user_lessons
 )
 from models.user import update_learning_progress
 from utils.auth import get_current_user

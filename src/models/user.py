@@ -7,7 +7,64 @@ import asyncio
 import os
 from concurrent.futures import ThreadPoolExecutor
 from src.config.settings import Settings
+async def get_user_settings(uid: str) -> Optional[Dict[str, Any]]:
+    """
+    Get a user's settings from Firestore
+    
+    Args:
+        uid: User ID from Firebase Auth
+        
+    Returns:
+        Dict: User settings data or None if not found
+    """
+    try:
+        # Run in thread pool to avoid blocking
+        def _get_settings():
+            doc_ref = db.collection("userSettings").document(uid)
+            doc = doc_ref.get()
+            if doc.exists:
+                return doc.to_dict()
+            return None
+            
+        return await asyncio.get_event_loop().run_in_executor(executor, _get_settings)
+        
+    except Exception as e:
+        logger.error(f"Error getting user settings: {str(e)}")
+        raise
 
+async def update_user_settings(uid: str, settings_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Update a user's settings in Firestore
+    
+    Args:
+        uid: User ID from Firebase Auth
+        settings_data: Dictionary of settings to update
+        
+    Returns:
+        Dict: Updated user settings data
+    """
+    try:
+        # Add updated_at timestamp
+        settings_data["updated_at"] = datetime.now()
+        settings_data["user_id"] = uid
+        
+        # Run in thread pool to avoid blocking
+        def _update_settings():
+            doc_ref = db.collection("userSettings").document(uid)
+            
+            # Create or update document
+            if not doc_ref.get().exists:
+                doc_ref.set(settings_data)
+            else:
+                doc_ref.update(settings_data)
+                
+            return doc_ref.get().to_dict()
+            
+        return await asyncio.get_event_loop().run_in_executor(executor, _update_settings)
+        
+    except Exception as e:
+        logger.error(f"Error updating user settings: {str(e)}")
+        raise
 # Initialize logger
 logger = logging.getLogger(__name__)
 
@@ -199,5 +256,130 @@ async def update_learning_progress(uid: str, update_data: Dict[str, Any]) -> Dic
         
     except Exception as e:
         logger.error(f"Error updating learning progress: {str(e)}")
+        raise
+        
+async def get_lesson_progress(uid: str, lesson_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Get a user's progress for a specific lesson
+    
+    Args:
+        uid: User ID from Firebase Auth
+        lesson_id: Lesson ID
+        
+    Returns:
+        Dict: Lesson progress data or None if not found
+    """
+    try:
+        def _get_lesson_progress():
+            # Get user's learning progress document
+            doc_ref = db.collection("learningProgress").document(uid)
+            doc = doc_ref.get()
+            
+            if not doc.exists:
+                return None
+                
+            progress_data = doc.to_dict()
+            completed_lessons = progress_data.get("completed_lessons", [])
+            
+            # Look for the lesson in completed lessons
+            lesson_progress = next(
+                (lesson for lesson in completed_lessons 
+                 if lesson.get("lesson_id") == lesson_id),
+                None
+            )
+            
+            # If not in completed lessons, check current lesson
+            if not lesson_progress and progress_data.get("current_lesson", {}).get("lesson_id") == lesson_id:
+                lesson_progress = progress_data["current_lesson"]
+            
+            # Format the response to match LessonProgressResponse schema
+            if lesson_progress:
+                return {
+                    "progress": lesson_progress.get("progress", 0.0),
+                    "time_spent": lesson_progress.get("time_spent", 0),
+                    "completed": lesson_progress.get("completed", False),
+                    "score": lesson_progress.get("score"),
+                    "last_position": lesson_progress.get("last_position"),
+                    "notes": lesson_progress.get("notes"),
+                    "last_accessed": lesson_progress.get("last_accessed")
+                }
+            
+            return None
+            
+        return await asyncio.get_event_loop().run_in_executor(executor, _get_lesson_progress)
+        
+    except Exception as e:
+        logger.error(f"Error getting lesson progress: {str(e)}")
+        raise
+
+async def update_lesson_progress(uid: str, lesson_id: str, progress_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Update a user's progress for a specific lesson
+    
+    Args:
+        uid: User ID from Firebase Auth
+        lesson_id: Lesson ID
+        progress_data: Progress data to update
+        
+    Returns:
+        Dict: Updated lesson progress data
+    """
+    try:
+        # Add timestamps
+        progress_data["last_accessed"] = datetime.now()
+        progress_data["lesson_id"] = lesson_id
+        
+        def _update_lesson_progress():
+            doc_ref = db.collection("learningProgress").document(uid)
+            doc = doc_ref.get()
+            
+            current_data = doc.to_dict() if doc.exists else {
+                "completed_lessons": [],
+                "total_time_spent": 0
+            }
+            
+            completed_lessons = current_data.get("completed_lessons", [])
+            
+            # Find existing lesson progress
+            existing_index = next(
+                (i for i, lesson in enumerate(completed_lessons)
+                 if lesson.get("lesson_id") == lesson_id),
+                None
+            )
+            
+            if progress_data.get("completed", False):
+                # If completing the lesson, add/update in completed_lessons
+                if existing_index is not None:
+                    completed_lessons[existing_index].update(progress_data)
+                else:
+                    completed_lessons.append(progress_data)
+                    
+                # Clear from current_lesson if it was there
+                if current_data.get("current_lesson", {}).get("lesson_id") == lesson_id:
+                    current_data["current_lesson"] = None
+                    
+            else:
+                # Update current_lesson for in-progress lessons
+                current_data["current_lesson"] = progress_data
+            
+            # Update total time spent
+            current_data["total_time_spent"] = (
+                current_data.get("total_time_spent", 0) + 
+                (progress_data.get("time_spent", 0) - 
+                 (completed_lessons[existing_index].get("time_spent", 0) if existing_index is not None else 0))
+            )
+            
+            # Update the document
+            if doc.exists:
+                doc_ref.update(current_data)
+            else:
+                doc_ref.set(current_data)
+            
+            return progress_data
+            
+        return await asyncio.get_event_loop().run_in_executor(executor, _update_lesson_progress)
+        
+    except Exception as e:
+        logger.error(f"Error updating lesson progress: {str(e)}")
         raise
 
