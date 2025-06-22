@@ -20,6 +20,9 @@ async def get_recommended_lessons(
         
     Returns:
         List[Dict]: List of recommended lesson data with relevance scores
+        
+    Raises:
+        Exception: If no recommendations can be generated or retrieved
     """
     try:
         # Simplified implementation to ensure basic functionality works
@@ -42,6 +45,9 @@ async def get_recommended_lessons(
         # Get all lessons
         all_lessons = await asyncio.get_event_loop().run_in_executor(executor, _get_available_lessons)
         
+        if not all_lessons:
+            raise Exception("No lessons available for recommendations")
+        
         # Get user's completed lesson IDs
         learning_progress = await get_learning_progress(user_id)
         completed_lesson_ids = []
@@ -59,110 +65,16 @@ async def get_recommended_lessons(
                 
                 if len(recommended_lessons) >= limit:
                     break
+        
+        # If no recommendations were found, raise an exception
+        if not recommended_lessons:
+            raise Exception("No suitable lesson recommendations found for user")
                     
         return recommended_lessons
         
-        # Extract user preferences and learning history
-        completed_lesson_ids = []
-        if learning_progress and "completed_lessons" in learning_progress:
-            completed_lesson_ids = [lesson.get("lesson_id") for lesson in learning_progress.get("completed_lessons", [])]
-            
-        # Get user preferences
-        preferred_subjects = []
-        preferred_difficulty = "beginner"
-        
-        if user_settings and "learning_preferences" in user_settings:
-            learning_prefs = user_settings.get("learning_preferences", {})
-            preferred_subjects = learning_prefs.get("preferred_subjects", [])
-            preferred_difficulty = learning_prefs.get("difficulty_preference", "beginner")
-            
-        # Get all available lessons not yet completed by the user
-        def _get_available_lessons():
-            # Start with a base query for all lessons
-            query = db.collection("lessons")
-            
-            # Order by creation date (most recent first)
-            query = query.order_by("created_at", direction=firestore.Query.DESCENDING)
-            
-            # Execute query and get results
-            docs = query.stream()
-            lessons = []
-            
-            for doc in docs:
-                # Skip completed lessons
-                if doc.id in completed_lesson_ids:
-                    continue
-                    
-                lesson_data = doc.to_dict()
-                lesson_data["id"] = doc.id
-                lessons.append(lesson_data)
-                
-            return lessons
-            
-        available_lessons = await asyncio.get_event_loop().run_in_executor(executor, _get_available_lessons)
-        
-        # Score and rank lessons based on user preferences
-        scored_lessons = []
-        
-        for lesson in available_lessons:
-            score = 0.0
-            reason = []
-            
-            # Boost score for preferred subjects
-            if preferred_subjects and lesson.get("subject") in preferred_subjects:
-                score += 0.3
-                reason.append(f"Matches your preferred subject: {lesson.get('subject')}")
-                
-            # Boost score for matching difficulty preference
-            if lesson.get("difficulty") == preferred_difficulty:
-                score += 0.2
-                reason.append(f"Matches your preferred difficulty level: {preferred_difficulty}")
-            elif preferred_difficulty == "beginner" and lesson.get("difficulty") == "intermediate":
-                score += 0.1
-                reason.append("Slightly more advanced than your preference")
-            elif preferred_difficulty == "intermediate" and lesson.get("difficulty") == "advanced":
-                score += 0.1
-                reason.append("Slightly more advanced than your preference")
-                
-            # Penalize lessons that are too difficult
-            if preferred_difficulty == "beginner" and lesson.get("difficulty") == "advanced":
-                score -= 0.2
-                
-            # Boost score for recently created lessons
-            if lesson.get("created_at") and (datetime.now() - lesson.get("created_at")).days < 30:
-                score += 0.1
-                reason.append("Recently added content")
-                
-            # Add some score based on tag matches with past lessons
-            user_interested_tags = set()
-            if learning_progress and "completed_lessons" in learning_progress:
-                for completed_lesson_id in completed_lesson_ids:
-                    completed_lesson = await get_lesson_by_id(completed_lesson_id)
-                    if completed_lesson and "tags" in completed_lesson:
-                        user_interested_tags.update(completed_lesson.get("tags", []))
-            
-            common_tags = set(lesson.get("tags", [])).intersection(user_interested_tags)
-            if common_tags:
-                score += 0.1 * min(len(common_tags), 3)  # Cap the boost at 3 common tags
-                reason.append(f"Related to topics you've studied: {', '.join(list(common_tags)[:3])}")
-                
-            # Add the lesson with its score
-            lesson["relevance_score"] = round(score, 2)
-            lesson["recommendation_reason"] = "; ".join(reason) if reason else "New content you might enjoy"
-            scored_lessons.append(lesson)
-            
-        # Sort by relevance score (highest first)
-        scored_lessons.sort(key=lambda x: x.get("relevance_score", 0), reverse=True)
-        
-        # Return top recommendations
-        return scored_lessons[:limit]
-        
     except Exception as e:
         logger.error(f"Error getting recommended lessons: {str(e)}")
-        # Handle errors gracefully and return empty list instead of raising exception
-    except Exception as e:
-        logger.error(f"Error getting recommended lessons: {str(e)}")
-        return []
+        raise
 
 async def get_user_lessons(
     user_id: str,
@@ -181,6 +93,9 @@ async def get_user_lessons(
         
     Returns:
         List[Dict]: List of user's lessons with progress information
+        
+    Raises:
+        Exception: If user lessons cannot be retrieved or if no lessons are available
     """
     try:
         # Simplified implementation for basic functionality
@@ -199,10 +114,17 @@ async def get_user_lessons(
             
         # Get all lessons and learning progress
         all_lessons = await asyncio.get_event_loop().run_in_executor(executor, _get_all_lessons)
+        
+        if not all_lessons:
+            raise Exception("No lessons available")
+            
         learning_progress = await get_learning_progress(user_id)
         
-        # If no progress data, return first few lessons as "recommended to start"
+        # If no progress data, check if we have lessons to recommend
         if not learning_progress:
+            if len(all_lessons) == 0:
+                raise Exception("No lessons available for user")
+                
             user_lessons = []
             for lesson in all_lessons[:limit]:
                 lesson["progress"] = {
@@ -213,9 +135,15 @@ async def get_user_lessons(
                     "started_at": None
                 }
                 user_lessons.append(lesson)
+                
+            # After applying the skip, check if we have lessons to return
+            if skip >= len(user_lessons):
+                raise Exception("No lessons found for user with the given pagination parameters")
+                
+            # Apply skip directly and return
+            user_lessons = user_lessons[skip:skip+limit]
             return user_lessons
             
-        
         # Process completed lessons from learning progress
         completed_lessons = learning_progress.get("completed_lessons", []) if learning_progress else []
         completed_lesson_ids = [lesson.get("lesson_id") for lesson in completed_lessons]
@@ -267,12 +195,15 @@ async def get_user_lessons(
         
         # Apply skip for pagination
         user_lessons = user_lessons[skip:skip+limit]
+        
+        if not user_lessons:
+            raise Exception("No lessons found for user")
                     
         return user_lessons
         
     except Exception as e:
         logger.error(f"Error getting user lessons: {str(e)}")
-        return []  # Return empty list instead of raising exception
+        raise
 from utils.ai import generate_lesson_content
 
 # Initialize Firestore client

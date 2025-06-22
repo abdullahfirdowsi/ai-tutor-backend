@@ -1,9 +1,30 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Path
+from fastapi import APIRouter, Depends, HTTPException, status, Path, Query
 from typing import Dict, Any, List
 import logging
 import firebase_admin
 from firebase_admin import auth as firebase_auth
 from firebase_admin import exceptions as firebase_exceptions
+from schemas.user import (
+    UserProfileUpdate, 
+    UserProfileResponse, 
+    LearningProgressResponse,
+    UserSettings,
+    UserSettingsResponse,
+    UserActivityResponse
+)
+from models.user import (
+    get_user_profile, 
+    update_user_profile, 
+    get_learning_progress,
+    get_user_settings,
+    update_user_settings
+)
+from utils.auth import get_current_user
+
+# Initialize router
+router = APIRouter()
+logger = logging.getLogger(__name__)
+
 @router.get("/me/settings", response_model=UserSettingsResponse)
 async def get_my_settings(current_user: Dict[str, Any] = Depends(get_current_user)):
     """
@@ -64,6 +85,13 @@ async def get_my_activity(
         progress_data = await get_learning_progress(user_id)
         completed_lessons = progress_data.get("completed_lessons", []) if progress_data else []
         
+        # If no completed lessons are found, return 404
+        if not completed_lessons:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No activity records found for this user"
+            )
+        
         # Sort by completion date (most recent first)
         completed_lessons.sort(key=lambda x: x.get("completion_date", ""), reverse=True)
         
@@ -79,6 +107,13 @@ async def get_my_activity(
                 "time_spent": lesson.get("time_spent"),
                 "details": f"Completed lesson: {lesson.get('title')}"
             })
+        
+        # If no activities after filtering, return 404
+        if not activities:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No activity records found for this user"
+            )
         
         return UserActivityResponse(
             activities=activities,
@@ -127,25 +162,6 @@ async def update_my_settings(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error while updating user settings"
         )
-from schemas.user import (
-    UserProfileUpdate, 
-    UserProfileResponse, 
-    LearningProgressResponse,
-    UserSettings,
-    UserSettingsResponse
-)
-from models.user import (
-    get_user_profile, 
-    update_user_profile, 
-    get_learning_progress,
-    get_user_settings,
-    update_user_settings
-)
-from utils.auth import get_current_user
-
-# Initialize router
-router = APIRouter()
-logger = logging.getLogger(__name__)
 
 @router.get("/me", response_model=UserProfileResponse)
 async def get_my_profile(current_user: Dict[str, Any] = Depends(get_current_user)):

@@ -111,7 +111,8 @@ async def get_qa_sessions(
         
     except Exception as e:
         logger.error(f"Error getting QA sessions: {str(e)}")
-        raise
+        # Return an empty list instead of raising an exception
+        return []
 
 async def get_qa_session(
     session_id: str, 

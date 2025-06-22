@@ -2,7 +2,30 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query, Path
 from typing import Dict, Any, List, Optional
 import logging
 from datetime import datetime
-@router.get("/recommended", response_model=RecommendedLessonsResponse)
+from schemas.lesson import (
+    LessonListResponse,
+    LessonResponse,
+    LessonGenerateRequest,
+    LessonProgressUpdate,
+    RecommendedLessonsResponse,
+    UserLessonsResponse
+)
+from models.lesson import (
+    get_lessons,
+    get_lesson_by_id,
+    generate_lesson,
+    update_lesson_progress,
+    get_recommended_lessons,
+    get_user_lessons
+)
+from models.user import update_learning_progress
+from utils.auth import get_current_user
+
+# Initialize router
+router = APIRouter()
+logger = logging.getLogger(__name__)
+
+@router.get("/recommended/", response_model=RecommendedLessonsResponse)
 async def get_lesson_recommendations(
     limit: int = Query(3, ge=1, le=10, description="Maximum number of recommendations to return"),
     current_user: Dict[str, Any] = Depends(get_current_user)
@@ -33,12 +56,22 @@ async def get_lesson_recommendations(
         
     except Exception as e:
         logger.error(f"Error retrieving lesson recommendations: {str(e)}")
+        
+        # Check for "no lessons available" or "no recommendations found" errors
+        error_msg = str(e).lower()
+        if "no lessons available" in error_msg or "no suitable lesson recommendations" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No lesson recommendations found"
+            )
+        
+        # Generic server error for other exceptions
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve lesson recommendations"
         )
 
-@router.get("/my-lessons", response_model=UserLessonsResponse)
+@router.get("/my-lessons/", response_model=UserLessonsResponse)
 async def get_my_lessons(
     limit: int = Query(10, ge=1, le=50, description="Maximum number of lessons to return"),
     skip: int = Query(0, ge=0, description="Number of lessons to skip"),
@@ -77,34 +110,22 @@ async def get_my_lessons(
         
     except Exception as e:
         logger.error(f"Error retrieving user lessons: {str(e)}")
+        
+        # Check for "no lessons available" or "no lessons found" errors
+        error_msg = str(e).lower()
+        if "no lessons available" in error_msg or "no lessons found for user" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No lessons found for this user"
+            )
+        
+        # Generic server error for other exceptions
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve user lessons"
         )
-from schemas.lesson import (
-    LessonListResponse,
-    LessonResponse,
-    LessonGenerateRequest,
-    LessonProgressUpdate,
-    RecommendedLessonsResponse,
-    UserLessonsResponse
-)
-from models.lesson import (
-    get_lessons,
-    get_lesson_by_id,
-    generate_lesson,
-    update_lesson_progress,
-    get_recommended_lessons,
-    get_user_lessons
-)
-from models.user import update_learning_progress
-from utils.auth import get_current_user
 
-# Initialize router
-router = APIRouter()
-logger = logging.getLogger(__name__)
-
-@router.get("", response_model=LessonListResponse)
+@router.get("/", response_model=LessonListResponse)
 async def list_lessons(
     subject: Optional[str] = Query(None, description="Filter by subject"),
     difficulty: Optional[str] = Query(None, description="Filter by difficulty level"),
